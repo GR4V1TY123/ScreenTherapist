@@ -31,6 +31,11 @@ class AnalyticsTab extends StatelessWidget {
                   const Text('Deep Analytics', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Text('Analyzing your neural habit data.', style: TextStyle(color: AppTheme.outlineVariant)),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Updated ${data.updatedAtIndiaLabel} | Tracking since ${data.trackingStartedIndiaLabel}',
+                      style: TextStyle(color: AppTheme.outlineVariant, fontSize: 12),
+                    ),
                   const SizedBox(height: 32),
                   
                   // Scores Row
