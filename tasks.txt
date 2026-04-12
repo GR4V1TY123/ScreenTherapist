@@ -1,0 +1,22 @@
+Device Objectives:
+1. Screen time of today
+2. Screen time of Week
+3. Unlock count weekly
+4. App usage weekly
+5. App usage today
+6. a focus score to compare next Week
+7. addiction score to compare increase/decrease in addiction rate
+8. trends (weekly)
+(optional) Category based app usage, (productive vs entertainment vs general) with productive ratio
+(optional) late night usage
+
+Backend:
+    Receives:
+    - daily summaries (NOT raw data)
+    Does:
+    - long-term trends
+    - regression models
+    - personalization
+    - LLM suggestions
+    - suggest other healthy activities
+    - addiction stats
