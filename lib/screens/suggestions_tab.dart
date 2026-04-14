@@ -1,12 +1,157 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../theme/app_theme.dart';
-import '../state/app_state.dart';
-import '../widgets/top_nav.dart';
-import '../widgets/glass_card.dart';
 
-class SuggestionsTab extends StatelessWidget {
+import '../services/daily_usage_service.dart';
+import '../services/screen_time_service.dart';
+import '../theme/app_theme.dart';
+import '../widgets/glass_card.dart';
+import '../widgets/top_nav.dart';
+
+class SuggestionsTab extends StatefulWidget {
   const SuggestionsTab({super.key});
+
+  @override
+  State<SuggestionsTab> createState() => _SuggestionsTabState();
+}
+
+class _SuggestionsTabState extends State<SuggestionsTab> {
+  bool isLoading = false;
+  List<String> suggestions = const [];
+  String? errorMessage;
+
+  late Future<SuggestionsInputData?> _inputFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _inputFuture = _loadInputData();
+  }
+
+  Future<SuggestionsInputData?> _loadInputData() async {
+    final screen = await ScreenTimeService.getMetrics();
+    if (screen == null) return null;
+
+    final today = await DailyUsageService.fetchAndStoreDailyStats() ??
+        await DailyUsageService.getStoredDailyStats();
+    if (today == null) return null;
+
+    final flags = _deriveFlags(screen);
+
+    return SuggestionsInputData(
+      metrics: {
+        'screen_time_today': _formatDuration(screen.todayScreenTime),
+        'screen_time_weekly': _formatDuration(screen.weeklyScreenTime),
+        'unlock_count_today': screen.todayUnlocks,
+        'unlock_count_weekly': screen.weeklyUnlocks,
+        'focus_score': screen.focusScore.round(),
+        'addiction_score': screen.addictionScore.round(),
+        'productive_ratio': '${(screen.productiveRatio * 100).round()}%',
+        'late_night_usage': _formatDuration(screen.lateNightUsage),
+      },
+      apps: screen.todayApps
+          .take(5)
+          .map(
+            (a) => {
+              'name': a.name,
+              'usage': _formatDuration(a.usage),
+              'category': a.category,
+            },
+          )
+          .toList(),
+      flags: flags,
+    );
+  }
+
+  List<String> _deriveFlags(ScreenTimeData data) {
+    final flags = <String>[];
+
+    final weeklyDailyAverageMinutes = data.weeklyScreenTime.inMinutes / 7.0;
+    final todayMinutes = data.todayScreenTime.inMinutes.toDouble();
+    if (todayMinutes > weeklyDailyAverageMinutes * 1.2) {
+      flags.add('high_screen_time');
+    }
+
+    final weeklyUnlockAverage = data.weeklyUnlocks / 7.0;
+    if (data.todayUnlocks > weeklyUnlockAverage * 1.2) {
+      flags.add('high_unlock_frequency');
+    }
+
+    if (data.lateNightUsage.inMinutes > 0) {
+      flags.add('late_night_usage');
+    }
+
+    if (data.productiveRatio < 0.4) {
+      flags.add('low_productive_ratio');
+    }
+
+    return flags;
+  }
+
+  Future<List<String>> fetchSuggestions(Map<String, dynamic> inputData) async {
+    await Future.delayed(const Duration(seconds: 2));
+
+    final flags =
+        (inputData['flags'] as List<dynamic>? ?? []).map((e) => e.toString()).toList();
+    final apps = (inputData['apps'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+
+    final topEntertainment = apps.firstWhere(
+      (a) => (a['category']?.toString().toLowerCase() ?? '') == 'entertainment',
+      orElse: () => const {'name': 'social media'},
+    );
+    final topEntertainmentName = topEntertainment['name']?.toString() ?? 'social media';
+
+    final generated = <String>[];
+
+    if (flags.contains('high_screen_time')) {
+      generated.add(
+        'Set a usage cap for $topEntertainmentName to reduce today\'s total screen time.',
+      );
+    }
+    if (flags.contains('high_unlock_frequency')) {
+      generated.add(
+        'Reduce compulsive checks by batching notifications and checking your phone on schedule.',
+      );
+    }
+    if (flags.contains('late_night_usage')) {
+      generated.add(
+        'Cut late-night sessions by enabling bedtime mode and keeping the phone away from your bed.',
+      );
+    }
+    if (flags.contains('low_productive_ratio')) {
+      generated.add(
+        'Start your day with one productive app block before opening entertainment apps.',
+      );
+    }
+
+    if (generated.isEmpty) {
+      generated.add('Your habits are balanced today. Keep the same routine.');
+      generated.add('Take short no-phone breaks between intensive app sessions.');
+      generated.add('Review weekly trends daily to avoid hidden usage spikes.');
+    }
+
+    return generated;
+  }
+
+  Future<void> _onGenerateSuggestions(SuggestionsInputData input) async {
+    setState(() {
+      isLoading = true;
+      errorMessage = null;
+    });
+
+    try {
+      final response = await fetchSuggestions(input.toMap());
+      if (!mounted) return;
+      setState(() {
+        suggestions = response;
+        isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        isLoading = false;
+        errorMessage = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,426 +159,317 @@ class SuggestionsTab extends StatelessWidget {
       backgroundColor: AppTheme.surface,
       body: Stack(
         children: [
-          ListView(
-            padding: const EdgeInsets.only(top: 80, bottom: 120, left: 24, right: 24),
-            children: const [
-              _HeaderSection(),
-              SizedBox(height: 40),
-              _DailyChallengeCard(),
-              SizedBox(height: 40),
-              _BentoGrid(),
-              SizedBox(height: 40),
-              _ImprovementTips(),
-            ],
-          ),
-          const Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: TopNavRoute(),
-          ),
-        ],
-      ),
-    );
-  }
-}
+          FutureBuilder<SuggestionsInputData?>(
+            future: _inputFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-class _HeaderSection extends StatelessWidget {
-  const _HeaderSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Smart Suggestions', style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 40)),
-        const SizedBox(height: 8),
-        Text('Personalized digital wellness roadmap based on your AI insights', style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppTheme.outlineVariant)),
-      ],
-    );
-  }
-}
-
-class _DailyChallengeCard extends StatelessWidget {
-  const _DailyChallengeCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final isFocusModeActive = context.watch<AppState>().isFocusModeActive;
-
-    return GlassCard(
-      padding: const EdgeInsets.all(24),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -20,
-            top: -20,
-            child: Icon(Icons.emoji_events, size: 120, color: Colors.white.withValues(alpha: 0.05)),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("TODAY's QUEST", style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppTheme.secondary)),
-                      Text("Digital Sunset", style: Theme.of(context).textTheme.headlineSmall),
-                    ],
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppTheme.secondaryContainer.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppTheme.secondary.withValues(alpha: 0.2)),
-                    ),
-                    child: Text('+250 XP', style: TextStyle(color: AppTheme.secondary, fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text("No screen time for 2 hours before bed", style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppTheme.onSurface.withValues(alpha: 0.7))),
-                  Text("75%", style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppTheme.secondary)),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Container(
-                height: 12,
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: LayoutBuilder(builder: (context, constraints) {
-                  return AnimatedContainer(
-                    duration: const Duration(seconds: 1),
-                    width: isFocusModeActive ? constraints.maxWidth : constraints.maxWidth * 0.75,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: [AppTheme.secondary, AppTheme.secondaryContainer]),
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [BoxShadow(color: AppTheme.secondary.withValues(alpha: 0.4), blurRadius: 12)],
-                    ),
-                  );
-                }),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => context.read<AppState>().toggleFocusMode(),
-                      borderRadius: BorderRadius.circular(24),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(colors: [AppTheme.primary, AppTheme.primaryContainer]),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: Center(
-                          child: Text(
-                            isFocusModeActive ? 'Focus Mode Active' : 'Start Focus Mode',
-                            style: const TextStyle(color: Color(0xFF000a7b), fontWeight: FontWeight.bold),
+              final input = snapshot.data;
+              if (input == null) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: GlassCard(
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.lock_outline, size: 42),
+                          const SizedBox(height: 10),
+                          const Text('Usage data unavailable'),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Grant usage access to generate personalized suggestions.',
+                            textAlign: TextAlign.center,
                           ),
-                        ),
+                          const SizedBox(height: 12),
+                          ElevatedButton(
+                            onPressed: () async {
+                              await DailyUsageService.openUsageSettings();
+                              if (!mounted) return;
+                              setState(() {
+                                _inputFuture = _loadInputData();
+                              });
+                            },
+                            child: const Text('Open Usage Access Settings'),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: InkWell(
-                      onTap: () {},
-                      borderRadius: BorderRadius.circular(24),
-                      child: Container(
+                );
+              }
+
+              return ListView(
+                padding: const EdgeInsets.only(top: 100, bottom: 120, left: 20, right: 20),
+                children: [
+                  const _Header(),
+                  const SizedBox(height: 16),
+                  _SummaryCard(flags: input.flags),
+                  const SizedBox(height: 14),
+                  _FlagsSection(flags: input.flags),
+                  const SizedBox(height: 14),
+                  _SuggestionsSection(
+                    isLoading: isLoading,
+                    suggestions: suggestions,
+                    errorMessage: errorMessage,
+                    onRetry: () => _onGenerateSuggestions(input),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: isLoading ? null : () => _onGenerateSuggestions(input),
+                      icon: isLoading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_awesome),
+                      label: Text(isLoading ? 'Generating...' : 'Generate Suggestions'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primary,
+                        foregroundColor: AppTheme.surface,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: AppTheme.outlineVariant.withValues(alpha: 0.3)),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: const Center(
-                          child: Text('View History', style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       ),
                     ),
                   ),
                 ],
-              )
-            ],
+              );
+            },
           ),
+          const Positioned(top: 0, left: 0, right: 0, child: TopNavRoute()),
         ],
       ),
     );
   }
+
+  String _formatDuration(Duration duration) {
+    final h = duration.inHours;
+    final m = duration.inMinutes % 60;
+    return '${h}h ${m.toString().padLeft(2, '0')}m';
+  }
 }
 
-class _BentoGrid extends StatelessWidget {
-  const _BentoGrid();
+class SuggestionsInputData {
+  final Map<String, dynamic> metrics;
+  final List<Map<String, dynamic>> apps;
+  final List<String> flags;
+
+  const SuggestionsInputData({
+    required this.metrics,
+    required this.apps,
+    required this.flags,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'metrics': metrics,
+      'apps': apps,
+      'flags': flags,
+    };
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header();
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<AppState>();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(Icons.auto_awesome, color: AppTheme.tertiary),
-            const SizedBox(width: 8),
-            Text('AI-Based Recommendations', style: Theme.of(context).textTheme.headlineSmall),
-          ],
+        Text('Suggestions', style: Theme.of(context).textTheme.headlineMedium),
+        const SizedBox(height: 6),
+        Text(
+          'Improve your digital habits',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.outlineVariant),
         ),
-        const SizedBox(height: 24),
-        if (!state.isDismissed('circadian')) ...[
-          _LargeCard(
-            id: 'circadian',
-            title: 'Optimize Circadian Rhythm',
-            desc: 'Your data shows a correlation between midnight phone usage and morning fatigue. We suggest enabling Grayscale mode after 10 PM.',
-            icon: Icons.brightness_3,
-            iconColor: AppTheme.primary,
-          ),
-          const SizedBox(height: 16),
-        ],
-        Row(
-          children: [
-            Expanded(
-              child: _SmallCard(
-                title: 'Mindful Pause',
-                desc: '3 min breathwork',
-                icon: Icons.self_improvement,
-                color: AppTheme.tertiary,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _SmallCard(
-                title: 'Silence Mode',
-                desc: 'Focus block active',
-                icon: Icons.notifications_off,
-                color: AppTheme.error,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        if (!state.isDismissed('social_cap')) ...[
-           _VerticalCard(
-            id: 'social_cap',
-            title: 'Social Media Cap',
-            desc: 'Limit Instagram to 30m today to regain 1.5h of productivity.',
-            icon: Icons.timer,
-            color: AppTheme.secondary,
-           )
-        ]
       ],
     );
   }
 }
 
-class _LargeCard extends StatelessWidget {
-  final String id;
-  final String title;
-  final String desc;
-  final IconData icon;
-  final Color iconColor;
+class _SummaryCard extends StatelessWidget {
+  final List<String> flags;
 
-  const _LargeCard({required this.id, required this.title, required this.desc, required this.icon, required this.iconColor});
+  const _SummaryCard({required this.flags});
 
   @override
   Widget build(BuildContext context) {
+    final summary = flags.isEmpty
+        ? 'No concerning behavior detected.'
+        : '${flags.take(2).map(_toReadable).join(' and ')} detected.';
+
     return GlassCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(16)),
-            child: Icon(icon, color: iconColor),
-          ),
-          const SizedBox(height: 16),
-          Text(title, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          Text(desc, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.onSurface.withValues(alpha: 0.7))),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              InkWell(
-                onTap: () {
-                  context.read<AppState>().dismissRecommendation(id);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Suggestion Applied!')));
-                },
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  decoration: BoxDecoration(color: AppTheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(20)),
-                  child: Text('APPLY SUGGESTION', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppTheme.primary)),
-                ),
-              ),
-              const SizedBox(width: 12),
-              TextButton(
-                onPressed: () => context.read<AppState>().dismissRecommendation(id),
-                child: Text('DISMISS', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppTheme.outlineVariant)),
-              ),
-            ],
-          )
-        ],
-      ),
-    );
-  }
-}
-
-class _VerticalCard extends StatelessWidget {
-  final String id;
-  final String title;
-  final String desc;
-  final IconData icon;
-  final Color color;
-
-  const _VerticalCard({required this.id, required this.title, required this.desc, required this.icon, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [AppTheme.surfaceContainerHigh, AppTheme.surfaceContainerLow],
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(16)),
-            child: Icon(icon, color: color),
-          ),
-          const SizedBox(height: 16),
-          Text(title, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          Text(desc, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.onSurface.withValues(alpha: 0.7))),
-          const SizedBox(height: 32),
-          InkWell(
-            onTap: () {
-                context.read<AppState>().dismissRecommendation(id);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reminder Set!')));
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                border: Border.all(color: color.withValues(alpha: 0.2)),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(child: Text('SET REMINDER', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color))),
-            ),
-          )
-        ],
-      ),
-    );
-  }
-}
-
-class _SmallCard extends StatelessWidget {
-  final String title;
-  final String desc;
-  final IconData icon;
-  final Color color;
-
-  const _SmallCard({required this.title, required this.desc, required this.icon, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 20),
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: AppTheme.error.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.insights_rounded, color: AppTheme.error, size: 18),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
-            child: Column(
+            child: Text(
+              summary,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _toReadable(String key) => key.replaceAll('_', ' ');
+}
+
+class _FlagsSection extends StatelessWidget {
+  final List<String> flags;
+
+  const _FlagsSection({required this.flags});
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Key Flags', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 10),
+          if (flags.isEmpty)
+            Text(
+              'No active flags',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.outlineVariant),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: flags
+                  .map(
+                    (flag) => Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(99),
+                        border: Border.all(color: AppTheme.outlineVariant.withValues(alpha: 0.35)),
+                      ),
+                      child: Text(
+                        flag,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SuggestionsSection extends StatelessWidget {
+  final bool isLoading;
+  final List<String> suggestions;
+  final String? errorMessage;
+  final VoidCallback onRetry;
+
+  const _SuggestionsSection({
+    required this.isLoading,
+    required this.suggestions,
+    required this.errorMessage,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Suggestions', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 10),
+          if (isLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 22),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (errorMessage != null)
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                Text(desc, style: TextStyle(fontSize: 11, color: AppTheme.outlineVariant)),
+                Text(
+                  errorMessage!,
+                  style: TextStyle(color: AppTheme.error),
+                ),
+                const SizedBox(height: 10),
+                TextButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                ),
               ],
+            )
+          else if (suggestions.isEmpty)
+            Text(
+              'Tap below to generate personalized suggestions.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.outlineVariant),
+            )
+          else
+            Column(
+              children: suggestions
+                  .map(
+                    (item) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _SuggestionItem(text: item),
+                    ),
+                  )
+                  .toList(),
             ),
-          )
         ],
       ),
     );
   }
 }
 
-class _ImprovementTips extends StatelessWidget {
-  const _ImprovementTips();
+class _SuggestionItem extends StatelessWidget {
+  final String text;
 
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-           children: [
-             Icon(Icons.psychology, color: AppTheme.primary),
-             const SizedBox(width: 8),
-             Text('Mental Wellness', style: Theme.of(context).textTheme.headlineSmall),
-           ],
-        ),
-        const SizedBox(height: 16),
-        _TipItem(title: 'Digital Minimalism Guide', color: AppTheme.primary),
-        const SizedBox(height: 12),
-        _TipItem(title: 'Journaling for Focus', color: AppTheme.primary, isHighlighted: true),
-        const SizedBox(height: 32),
-        Row(
-           children: [
-             Icon(Icons.bolt, color: AppTheme.secondary),
-             const SizedBox(width: 8),
-             Text('Productivity', style: Theme.of(context).textTheme.headlineSmall),
-           ],
-        ),
-        const SizedBox(height: 16),
-        _TipItem(title: 'Batch Notification Strategy', color: AppTheme.secondary),
-        const SizedBox(height: 12),
-        _TipItem(title: 'Deep Work Environment', color: AppTheme.secondary, isHighlighted: true),
-      ],
-    );
-  }
-}
-
-class _TipItem extends StatelessWidget {
-  final String title;
-  final Color color;
-  final bool isHighlighted;
-
-  const _TipItem({required this.title, required this.color, this.isHighlighted = false});
+  const _SuggestionItem({required this.text});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        border: isHighlighted ? Border(left: BorderSide(color: color, width: 4)) : null,
+        color: AppTheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-          Icon(Icons.chevron_right, color: AppTheme.outlineVariant),
+          Icon(Icons.check_circle_outline, size: 18, color: AppTheme.secondary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
         ],
       ),
     );

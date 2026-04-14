@@ -14,10 +14,10 @@ class BottomNav extends StatelessWidget {
     final shouldBlur = defaultTargetPlatform != TargetPlatform.android;
 
     Widget navSurface = Container(
-      height: 80,
+      height: 76,
       decoration: BoxDecoration(
         color: AppTheme.surfaceContainerHigh.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(32),
+        borderRadius: BorderRadius.circular(22),
         border: Border(
           top: BorderSide(
             color: Colors.white.withValues(alpha: 0.2),
@@ -33,7 +33,7 @@ class BottomNav extends StatelessWidget {
         ],
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _NavItem(
             icon: Icons.home_max_outlined,
@@ -69,12 +69,12 @@ class BottomNav extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 24),
+      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 10),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 500),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(32),
+            borderRadius: BorderRadius.circular(22),
             child: navSurface,
           ),
         ),
@@ -102,7 +102,7 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isActive 
+    final color = isActive
         ? AppTheme.primary 
         : (isSpecial ? AppTheme.primary : Colors.blueGrey.shade400);
 
@@ -111,8 +111,8 @@ class _NavItem extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        transform: Matrix4.diagonal3Values(isActive ? 1.05 : 1.0, isActive ? 1.05 : 1.0, 1.0),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        transform: Matrix4.diagonal3Values(isActive ? 1.03 : 1.0, isActive ? 1.03 : 1.0, 1.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
@@ -131,13 +131,15 @@ class _NavItem extends StatelessWidget {
               child: Icon(
                 icon,
                 color: isActive ? AppTheme.secondary : color,
-                size: 28,
+                size: 24,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
-              label.toUpperCase(),
+              label,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                fontSize: 11,
+                letterSpacing: 0.2,
                 color: isActive ? AppTheme.secondary : color,
               ),
             ),

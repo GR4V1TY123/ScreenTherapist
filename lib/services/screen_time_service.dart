@@ -14,6 +14,7 @@ class ScreenTimeData {
   final String mostAddictiveApp;
   final List<AppUsageInfo> todayApps;
   final List<AppUsageInfo> weeklyApps;
+  final Map<String, Duration> todayCategoryUsage;
   final double focusScore;
   final double addictionScore;
   final List<double> weeklyTrends;
@@ -30,6 +31,7 @@ class ScreenTimeData {
     required this.mostAddictiveApp,
     required this.todayApps,
     required this.weeklyApps,
+    required this.todayCategoryUsage,
     required this.focusScore,
     required this.addictionScore,
     required this.weeklyTrends,
@@ -120,7 +122,7 @@ class ScreenTimeService {
 
   static Future<ScreenTimeData?> getMetrics() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
-      return _getMockData();
+      return null;
     }
 
     final hasPermission = await DailyUsageService.hasUsagePermission();
@@ -157,6 +159,7 @@ class ScreenTimeService {
 
     final todayApps = _toAppUsageInfoList(todayRaw.appUsage).take(10).toList();
     final weeklyApps = _toAppUsageInfoList(weeklyAppUsage).take(10).toList();
+    final todayCategoryUsage = _buildCategoryUsage(todayRaw.appUsage);
 
     return ScreenTimeData(
       todayScreenTime: Duration(milliseconds: todayRaw.screenTimeMs),
@@ -168,6 +171,7 @@ class ScreenTimeService {
       mostAddictiveApp: humanReadableAppName(metrics.mostAddictiveAppPackage),
       todayApps: todayApps,
       weeklyApps: weeklyApps,
+      todayCategoryUsage: todayCategoryUsage,
       focusScore: metrics.focusScore,
       addictionScore: metrics.addictionScore,
       weeklyTrends: trends,
@@ -203,28 +207,21 @@ class ScreenTimeService {
     return list;
   }
 
-  static ScreenTimeData _getMockData() {
-    return ScreenTimeData(
-      todayScreenTime: const Duration(hours: 4, minutes: 20),
-      weeklyScreenTime: const Duration(hours: 32, minutes: 15),
-      weeklyUnlocks: 342,
-      todayUnlocks: 48,
-      lateNightUsage: const Duration(minutes: 54),
-      productiveRatio: 0.42,
-      mostAddictiveApp: 'Instagram',
-      todayApps: [
-        AppUsageInfo('com.instagram.android', const Duration(hours: 2), category: 'entertainment'),
-        AppUsageInfo('com.android.chrome', const Duration(minutes: 45), category: 'productive'),
-        AppUsageInfo('com.google.android.youtube', const Duration(hours: 1, minutes: 35), category: 'entertainment'),
-      ],
-      weeklyApps: [],
-      focusScore: 68.0,
-      addictionScore: 45.0,
-      weeklyTrends: [0.3, 0.6, 0.4, 0.8, 1.0, 0.5, 0.7],
-      updatedAtIndiaLabel: _formatIndiaTime(_nowUtc()),
-      trackingStartedIndiaLabel: _formatIndiaTime(_sessionOpenedUtc),
-    );
+  static Map<String, Duration> _buildCategoryUsage(Map<String, int> usageMap) {
+    final totals = <String, int>{
+      UsageMetricsProcessor.productiveCategory: 0,
+      UsageMetricsProcessor.entertainmentCategory: 0,
+      UsageMetricsProcessor.generalCategory: 0,
+    };
+
+    usageMap.forEach((pkg, ms) {
+      final category = UsageMetricsProcessor.categorizeApp(pkg);
+      totals[category] = (totals[category] ?? 0) + ms;
+    });
+
+    return totals.map((key, value) => MapEntry(key, Duration(milliseconds: value)));
   }
+
 }
 
 class AppUsageInfo {
@@ -237,7 +234,7 @@ class AppUsageInfo {
     this.packageName,
     this.usage, {
     String? displayName,
-    this.category = 'neutral',
+    this.category = 'general',
   }) : displayName = displayName ?? ScreenTimeService.humanReadableAppName(packageName);
 
   String get name => displayName;

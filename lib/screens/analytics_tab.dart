@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_theme.dart';
-import '../widgets/top_nav.dart';
-import '../widgets/glass_card.dart';
 import '../services/screen_time_service.dart';
+import '../theme/app_theme.dart';
+import '../widgets/glass_card.dart';
+import '../widgets/top_nav.dart';
 
 class AnalyticsTab extends StatelessWidget {
   const AnalyticsTab({super.key});
@@ -17,232 +17,424 @@ class AnalyticsTab extends StatelessWidget {
           FutureBuilder<ScreenTimeData?>(
             future: ScreenTimeService.getMetrics(),
             builder: (context, snapshot) {
-               if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-               }
-               if (!snapshot.hasData || snapshot.data == null) {
-                  return const Center(child: Text("Missing Access Permissions. Return to Home to grant."));
-               }
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-               final data = snapshot.data!;
-               return ListView(
-                padding: const EdgeInsets.only(top: 100, bottom: 120, left: 24, right: 24),
+              final data = snapshot.data;
+              if (data == null) {
+                return const _UnavailableState();
+              }
+
+              final categoryBreakdown = _buildCategoryPercent(data.todayCategoryUsage);
+              final lateNightInsight = _buildLateNightInsight(data.lateNightUsage);
+
+              return ListView(
+                padding: const EdgeInsets.only(top: 100, bottom: 120, left: 20, right: 20),
                 children: [
-                  const Text('Deep Analytics', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Text('Analyzing your neural habit data.', style: TextStyle(color: AppTheme.outlineVariant)),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Updated ${data.updatedAtIndiaLabel} | Tracking since ${data.trackingStartedIndiaLabel}',
-                      style: TextStyle(color: AppTheme.outlineVariant, fontSize: 12),
-                    ),
-                  const SizedBox(height: 32),
-                  
-                  // Scores Row
-                  Row(
-                    children: [
-                       Expanded(child: _ScoreCard(title: 'Focus Score', score: data.focusScore, color: AppTheme.secondary)),
-                       const SizedBox(width: 16),
-                       Expanded(child: _ScoreCard(title: 'Addiction Risk', score: data.addictionScore, color: AppTheme.error)),
-                    ],
+                  Text('Analytics', style: Theme.of(context).textTheme.headlineMedium),
+                  const SizedBox(height: 6),
+                  Text(
+                    'What are my usage patterns?',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.outlineVariant),
                   ),
-                  const SizedBox(height: 24),
-
-                  // Weekly Stats Box
-                  GlassCard(
-                    child: Column(
-                      children: [
-                         _StatRow(label: 'Weekly Screen Time', val: '${data.weeklyScreenTime.inHours}h ${data.weeklyScreenTime.inMinutes % 60}m'),
-                         const Divider(color: Colors.white10, height: 32),
-                         _StatRow(label: 'Weekly Phone Unlocks', val: '${data.weeklyUnlocks}x'),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 40),
-
-                  Text('Weekly Trend', style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 18),
+                  const _SectionTitle(title: 'Weekly Screen Time Trend'),
+                  const SizedBox(height: 10),
+                  _WeeklyScreenTimeCard(values: data.weeklyTrends),
                   const SizedBox(height: 16),
-                  _WeeklyChart(data: data.weeklyTrends),
-                  const SizedBox(height: 40),
-
-                  Text('App Usage Today', style: Theme.of(context).textTheme.titleLarge),
+                  const _SectionTitle(title: 'Focus Score Trend'),
+                  const SizedBox(height: 10),
+                  _FocusIndicatorCard(currentFocus: data.focusScore),
                   const SizedBox(height: 16),
-                  _AppBreakdownList(apps: data.todayApps),
+                  const _SectionTitle(title: 'Usage Breakdown'),
+                  const SizedBox(height: 10),
+                  _UsageBreakdownCard(breakdown: categoryBreakdown),
+                  const SizedBox(height: 16),
+                  const _SectionTitle(title: 'Unlock Pattern'),
+                  const SizedBox(height: 10),
+                  _UnlockPatternUnavailable(totalUnlocks: data.todayUnlocks),
+                  const SizedBox(height: 16),
+                  const _SectionTitle(title: 'Top Apps (Weekly)'),
+                  const SizedBox(height: 10),
+                  _TopAppsWeeklyCard(apps: data.weeklyApps),
+                  const SizedBox(height: 16),
+                  const _SectionTitle(title: 'Late Night Pattern Insight'),
+                  const SizedBox(height: 10),
+                  _InsightCard(text: lateNightInsight),
                 ],
               );
-            }
+            },
           ),
           const Positioned(top: 0, left: 0, right: 0, child: TopNavRoute()),
         ],
       ),
     );
   }
-}
 
-class _ScoreCard extends StatelessWidget {
-  final String title;
-  final double score;
-  final Color color;
+  static Map<String, double> _buildCategoryPercent(Map<String, Duration> usage) {
+    final productive = usage['productive']?.inMinutes.toDouble() ?? 0;
+    final entertainment = usage['entertainment']?.inMinutes.toDouble() ?? 0;
+    final general = usage['general']?.inMinutes.toDouble() ?? 0;
+    final total = productive + entertainment + general;
 
-  const _ScoreCard({required this.title, required this.score, required this.color});
+    if (total <= 0) {
+      return {
+        'productive': 0,
+        'entertainment': 0,
+        'neutral': 0,
+      };
+    }
 
-  @override
-  Widget build(BuildContext context) {
-     return GlassCard(
-       padding: const EdgeInsets.all(20),
-       child: Column(
-         crossAxisAlignment: CrossAxisAlignment.start,
-         children: [
-            Text(title, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppTheme.outlineVariant)),
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text('${score.toInt()}', style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: color)),
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 4),
-                  child: Text('/100', style: TextStyle(fontSize: 12, color: Colors.white54)),
-                )
-              ],
-            )
-         ],
-       )
-     );
+    return {
+      'productive': (productive / total) * 100,
+      'entertainment': (entertainment / total) * 100,
+      'neutral': (general / total) * 100,
+    };
+  }
+
+  static String _buildLateNightInsight(Duration lateNightUsage) {
+    if (lateNightUsage.inMinutes == 0) {
+      return 'No late-night usage detected today.';
+    }
+    if (lateNightUsage.inMinutes >= 60) {
+      return 'High usage during late-night hours suggests sleep-disrupting behavior.';
+    }
+    return 'Some late-night usage detected; reducing it may improve next-day focus.';
   }
 }
 
-class _StatRow extends StatelessWidget {
-  final String label;
-  final String val;
-
-  const _StatRow({required this.label, required this.val});
+class _UnavailableState extends StatelessWidget {
+  const _UnavailableState();
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        Text(val, style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 16)),
-      ],
-    );
-  }
-}
-
-class _WeeklyChart extends StatelessWidget {
-  final List<double> data;
-  const _WeeklyChart({required this.data});
-
-  @override
-  Widget build(BuildContext context) {
-    final labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    return GlassCard(
-      child: SizedBox(
-        height: 150,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: List.generate(7, (index) {
-            double val = index < data.length ? data[index] : 0.5;
-            final isHigh = val > 0.7; 
-            return Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 500),
-                  width: 16,
-                  height: 150 * val,
-                  decoration: BoxDecoration(
-                    color: isHigh ? AppTheme.error.withValues(alpha: 0.8) : AppTheme.secondary.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: [
-                        BoxShadow(
-                          color: (isHigh ? AppTheme.error : AppTheme.secondary).withValues(alpha: 0.2),
-                          blurRadius: 10,
-                        )
-                    ]
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(labels[index], style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppTheme.outlineVariant)),
-              ],
-            );
-          }),
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: GlassCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.lock_outline, size: 42),
+              const SizedBox(height: 10),
+              Text('No real analytics data available', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              const Text(
+                'Grant usage access to view live analytics patterns.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: ScreenTimeService.promptPermission,
+                child: const Text('Open Usage Access Settings'),
+              )
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _AppBreakdownList extends StatelessWidget {
-  final List<AppUsageInfo> apps;
-  const _AppBreakdownList({required this.apps});
+class _SectionTitle extends StatelessWidget {
+  final String title;
+
+  const _SectionTitle({required this.title});
 
   @override
   Widget build(BuildContext context) {
-    if (apps.isEmpty) {
-        return const Center(child: Padding(
-            padding: EdgeInsets.all(24.0),
-            child: Text("No apps recorded today yet.")
-        ));
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: apps.map((app) {
-         final maxMins = apps.first.usage.inMinutes.toDouble();
-         final percentage = maxMins > 0 ? (app.usage.inMinutes / maxMins).clamp(0.0, 1.0) : 0.0;
-         
-         return Padding(
-           padding: const EdgeInsets.only(bottom: 16),
-           child: _AppUsageItem(
-             name: app.name,
-             time: '${app.usage.inHours}h ${app.usage.inMinutes % 60}m',
-             percentage: percentage,
-             color: AppTheme.primary,
-           ),
-         );
-      }).toList(),
-    );
+    return Text(title, style: Theme.of(context).textTheme.titleLarge);
   }
 }
 
-class _AppUsageItem extends StatelessWidget {
-  final String name;
-  final String time;
-  final double percentage;
-  final Color color;
+class _WeeklyScreenTimeCard extends StatelessWidget {
+  final List<double> values;
 
-  const _AppUsageItem({required this.name, required this.time, required this.percentage, required this.color});
+  const _WeeklyScreenTimeCard({required this.values});
 
   @override
   Widget build(BuildContext context) {
+    final safe = _safeSeven(values);
+    final start = safe.first;
+    final end = safe.last;
+    final isUp = end > start;
+    final delta = (end - start).abs() * 100;
+
     return GlassCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Flexible(child: Text(name, style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-              Text(time, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+              Text('Last 7 days', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.outlineVariant)),
+              Text(
+                '${isUp ? '↑' : '↓'} ${delta.toStringAsFixed(0)}% relative',
+                style: TextStyle(color: isUp ? AppTheme.error : AppTheme.secondary, fontWeight: FontWeight.w700),
+              ),
             ],
           ),
-          const SizedBox(height: 12),
-          Container(
-            height: 6,
-            decoration: BoxDecoration(color: AppTheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(4)),
-            child: FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: percentage,
-              child: Container(
-                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
-              ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 120,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: List.generate(7, (index) {
+                final maxVal = safe.reduce((a, b) => a > b ? a : b);
+                final normalized = maxVal > 0 ? safe[index] / maxVal : 0.0;
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Container(
+                      height: 24 + (normalized * 88),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withValues(alpha: 0.75),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ),
+                );
+              }),
             ),
-          )
+          ),
         ],
       ),
     );
   }
+}
+
+class _FocusIndicatorCard extends StatelessWidget {
+  final double currentFocus;
+
+  const _FocusIndicatorCard({required this.currentFocus});
+
+  @override
+  Widget build(BuildContext context) {
+    final value = currentFocus.clamp(0, 100).toDouble();
+
+    return GlassCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Current Focus Score', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.outlineVariant)),
+              Text('${value.toStringAsFixed(0)}/100', style: Theme.of(context).textTheme.titleLarge),
+            ],
+          ),
+          const SizedBox(height: 10),
+          LinearProgressIndicator(
+            value: value / 100,
+            minHeight: 8,
+            color: AppTheme.secondary,
+            backgroundColor: AppTheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(99),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '7-day focus history is unavailable with current collected fields.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.outlineVariant, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UsageBreakdownCard extends StatelessWidget {
+  final Map<String, double> breakdown;
+
+  const _UsageBreakdownCard({required this.breakdown});
+
+  @override
+  Widget build(BuildContext context) {
+    final productive = (breakdown['productive'] ?? 0).clamp(0, 100).toDouble();
+    final entertainment = (breakdown['entertainment'] ?? 0).clamp(0, 100).toDouble();
+    final neutral = (breakdown['neutral'] ?? 0).clamp(0, 100).toDouble();
+
+    return GlassCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        children: [
+          _RatioRow(label: 'Productive', value: productive, color: AppTheme.secondary),
+          const SizedBox(height: 10),
+          _RatioRow(label: 'Entertainment', value: entertainment, color: AppTheme.error),
+          const SizedBox(height: 10),
+          _RatioRow(label: 'Neutral', value: neutral, color: AppTheme.primary),
+        ],
+      ),
+    );
+  }
+}
+
+class _RatioRow extends StatelessWidget {
+  final String label;
+  final double value;
+  final Color color;
+
+  const _RatioRow({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final widthFactor = (value / 100).clamp(0.0, 1.0);
+
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [Text(label), Text('${value.toStringAsFixed(0)}%')],
+        ),
+        const SizedBox(height: 6),
+        Container(
+          height: 8,
+          decoration: BoxDecoration(color: AppTheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(99)),
+          child: FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: widthFactor,
+            child: Container(
+              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(99)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _UnlockPatternUnavailable extends StatelessWidget {
+  final int totalUnlocks;
+
+  const _UnlockPatternUnavailable({required this.totalUnlocks});
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Total unlocks today: $totalUnlocks', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          Text(
+            'Time-of-day unlock distribution (morning/afternoon/evening/night) is unavailable with current collected fields.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.outlineVariant),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TopAppsWeeklyCard extends StatelessWidget {
+  final List<AppUsageInfo> apps;
+
+  const _TopAppsWeeklyCard({required this.apps});
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...apps]..sort((a, b) => b.usage.compareTo(a.usage));
+    final totalMinutes = sorted.fold<double>(0, (sum, app) => sum + app.usage.inMinutes);
+
+    return GlassCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        children: [
+          if (sorted.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Text('No weekly app usage available.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.outlineVariant)),
+            )
+          else
+            ...sorted.take(8).map((app) {
+              final pct = totalMinutes > 0 ? (app.usage.inMinutes / totalMinutes) * 100 : 0.0;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _TopAppWeeklyRow(
+                  name: app.name,
+                  usage: _formatDuration(app.usage),
+                  percentage: pct,
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  static String _formatDuration(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes % 60;
+    return '${h}h ${m}m';
+  }
+}
+
+class _TopAppWeeklyRow extends StatelessWidget {
+  final String name;
+  final String usage;
+  final double percentage;
+
+  const _TopAppWeeklyRow({required this.name, required this.usage, required this.percentage});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(name, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+        ),
+        const SizedBox(width: 10),
+        Text(usage),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 44,
+          child: Text(
+            '${percentage.toStringAsFixed(0)}%',
+            textAlign: TextAlign.right,
+            style: TextStyle(color: AppTheme.outlineVariant),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InsightCard extends StatelessWidget {
+  final String text;
+
+  const _InsightCard({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: AppTheme.error.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.nightlight_round, color: AppTheme.error, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text, style: Theme.of(context).textTheme.bodyLarge)),
+        ],
+      ),
+    );
+  }
+}
+
+List<double> _safeSeven(List<double> values) {
+  if (values.isEmpty) return List<double>.filled(7, 0.0);
+  if (values.length >= 7) return values.take(7).toList();
+  return [...values, ...List<double>.filled(7 - values.length, 0.0)];
 }

@@ -15,6 +15,10 @@ class UsageDerivedMetrics {
 }
 
 class UsageMetricsProcessor {
+  static const String productiveCategory = 'productive';
+  static const String entertainmentCategory = 'entertainment';
+  static const String generalCategory = 'general';
+
   static const Set<String> _productiveApps = {
     'com.android.chrome',
     'com.google.android.gm',
@@ -71,9 +75,9 @@ class UsageMetricsProcessor {
   }
 
   static String categorizeApp(String packageName) {
-    if (_productiveApps.contains(packageName)) return 'productive';
-    if (_entertainmentApps.contains(packageName)) return 'entertainment';
-    return 'neutral';
+    if (_productiveApps.contains(packageName)) return productiveCategory;
+    if (_entertainmentApps.contains(packageName)) return entertainmentCategory;
+    return generalCategory;
   }
 
   static int _sumMap(Map<String, int> map) {
