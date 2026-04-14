@@ -5,10 +5,17 @@ from pydantic import BaseModel
 from typing import List, Dict
 from fastapi import FastAPI
 from groq import Groq
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
@@ -16,6 +23,10 @@ class Input(BaseModel):
     metrics: Dict[str, str]
     apps: List[Dict[str, str]]
     flags: List[str]
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
 
 @app.post("/suggestions")
 def get_suggestions(input: Input):
