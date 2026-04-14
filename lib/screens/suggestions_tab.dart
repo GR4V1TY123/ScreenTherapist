@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import '../services/daily_usage_service.dart';
 import '../services/screen_time_service.dart';
@@ -14,8 +17,11 @@ class SuggestionsTab extends StatefulWidget {
 }
 
 class _SuggestionsTabState extends State<SuggestionsTab> {
+  static const _endpoint = 'https://screentherapist.onrender.com/suggestions';
+
+  final TextEditingController _queryController = TextEditingController();
   bool isLoading = false;
-  List<String> suggestions = const [];
+  SuggestionsResponse? suggestionsResponse;
   String? errorMessage;
 
   late Future<SuggestionsInputData?> _inputFuture;
@@ -23,7 +29,15 @@ class _SuggestionsTabState extends State<SuggestionsTab> {
   @override
   void initState() {
     super.initState();
+    _queryController.text =
+        'I get distracted by short videos and keep checking my phone at night. Help me reduce this.';
     _inputFuture = _loadInputData();
+  }
+
+  @override
+  void dispose() {
+    _queryController.dispose();
+    super.dispose();
   }
 
   Future<SuggestionsInputData?> _loadInputData() async {
@@ -40,10 +54,10 @@ class _SuggestionsTabState extends State<SuggestionsTab> {
       metrics: {
         'screen_time_today': _formatDuration(screen.todayScreenTime),
         'screen_time_weekly': _formatDuration(screen.weeklyScreenTime),
-        'unlock_count_today': screen.todayUnlocks,
-        'unlock_count_weekly': screen.weeklyUnlocks,
-        'focus_score': screen.focusScore.round(),
-        'addiction_score': screen.addictionScore.round(),
+        'unlock_count_today': '${screen.todayUnlocks}',
+        'unlock_count_weekly': '${screen.weeklyUnlocks}',
+        'focus_score': '${screen.focusScore.round()}',
+        'addiction_score': '${screen.addictionScore.round()}',
         'productive_ratio': '${(screen.productiveRatio * 100).round()}%',
         'late_night_usage': _formatDuration(screen.lateNightUsage),
       },
@@ -86,62 +100,42 @@ class _SuggestionsTabState extends State<SuggestionsTab> {
     return flags;
   }
 
-  Future<List<String>> fetchSuggestions(Map<String, dynamic> inputData) async {
-    await Future.delayed(const Duration(seconds: 2));
-
-    final flags =
-        (inputData['flags'] as List<dynamic>? ?? []).map((e) => e.toString()).toList();
-    final apps = (inputData['apps'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
-
-    final topEntertainment = apps.firstWhere(
-      (a) => (a['category']?.toString().toLowerCase() ?? '') == 'entertainment',
-      orElse: () => const {'name': 'social media'},
+  Future<SuggestionsResponse> fetchSuggestions(SuggestionsInputData inputData) async {
+    final payload = inputData.toPayload(query: _queryController.text.trim());
+    final response = await http.post(
+      Uri.parse(_endpoint),
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode(payload),
     );
-    final topEntertainmentName = topEntertainment['name']?.toString() ?? 'social media';
 
-    final generated = <String>[];
-
-    if (flags.contains('high_screen_time')) {
-      generated.add(
-        'Set a usage cap for $topEntertainmentName to reduce today\'s total screen time.',
-      );
-    }
-    if (flags.contains('high_unlock_frequency')) {
-      generated.add(
-        'Reduce compulsive checks by batching notifications and checking your phone on schedule.',
-      );
-    }
-    if (flags.contains('late_night_usage')) {
-      generated.add(
-        'Cut late-night sessions by enabling bedtime mode and keeping the phone away from your bed.',
-      );
-    }
-    if (flags.contains('low_productive_ratio')) {
-      generated.add(
-        'Start your day with one productive app block before opening entertainment apps.',
-      );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Request failed (${response.statusCode}). Please try again.');
     }
 
-    if (generated.isEmpty) {
-      generated.add('Your habits are balanced today. Keep the same routine.');
-      generated.add('Take short no-phone breaks between intensive app sessions.');
-      generated.add('Review weekly trends daily to avoid hidden usage spikes.');
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Unexpected response format from suggestions API.');
     }
 
-    return generated;
+    if (decoded['error'] != null) {
+      throw Exception(decoded['error'].toString());
+    }
+
+    return SuggestionsResponse.fromJson(decoded);
   }
 
   Future<void> _onGenerateSuggestions(SuggestionsInputData input) async {
     setState(() {
       isLoading = true;
       errorMessage = null;
+      suggestionsResponse = null;
     });
 
     try {
-      final response = await fetchSuggestions(input.toMap());
+      final response = await fetchSuggestions(input);
       if (!mounted) return;
       setState(() {
-        suggestions = response;
+        suggestionsResponse = response;
         isLoading = false;
       });
     } catch (e) {
@@ -211,9 +205,11 @@ class _SuggestionsTabState extends State<SuggestionsTab> {
                   const SizedBox(height: 14),
                   _FlagsSection(flags: input.flags),
                   const SizedBox(height: 14),
+                  _UserQuerySection(controller: _queryController),
+                  const SizedBox(height: 14),
                   _SuggestionsSection(
                     isLoading: isLoading,
-                    suggestions: suggestions,
+                    response: suggestionsResponse,
                     errorMessage: errorMessage,
                     onRetry: () => _onGenerateSuggestions(input),
                   ),
@@ -256,8 +252,8 @@ class _SuggestionsTabState extends State<SuggestionsTab> {
 }
 
 class SuggestionsInputData {
-  final Map<String, dynamic> metrics;
-  final List<Map<String, dynamic>> apps;
+  final Map<String, String> metrics;
+  final List<Map<String, String>> apps;
   final List<String> flags;
 
   const SuggestionsInputData({
@@ -266,8 +262,9 @@ class SuggestionsInputData {
     required this.flags,
   });
 
-  Map<String, dynamic> toMap() {
+  Map<String, dynamic> toPayload({required String query}) {
     return {
+      'query': query.isEmpty ? 'I want better screen-time habits and focus.' : query,
       'metrics': metrics,
       'apps': apps,
       'flags': flags,
@@ -379,15 +376,59 @@ class _FlagsSection extends StatelessWidget {
   }
 }
 
+class _UserQuerySection extends StatelessWidget {
+  final TextEditingController controller;
+
+  const _UserQuerySection({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Your Concern', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          Text(
+            'Add your goal or challenge so suggestions are personalized.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.outlineVariant),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: controller,
+            minLines: 2,
+            maxLines: 4,
+            textInputAction: TextInputAction.done,
+            decoration: InputDecoration(
+              hintText: 'Example: I overuse Instagram after 10 PM and miss sleep.',
+              filled: true,
+              fillColor: AppTheme.surfaceContainerHigh,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: AppTheme.outlineVariant.withValues(alpha: 0.35)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: AppTheme.outlineVariant.withValues(alpha: 0.35)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SuggestionsSection extends StatelessWidget {
   final bool isLoading;
-  final List<String> suggestions;
+  final SuggestionsResponse? response;
   final String? errorMessage;
   final VoidCallback onRetry;
 
   const _SuggestionsSection({
     required this.isLoading,
-    required this.suggestions,
+    required this.response,
     required this.errorMessage,
     required this.onRetry,
   });
@@ -424,21 +465,55 @@ class _SuggestionsSection extends StatelessWidget {
                 ),
               ],
             )
-          else if (suggestions.isEmpty)
+          else if (response == null)
             Text(
               'Tap below to generate personalized suggestions.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.outlineVariant),
             )
           else
             Column(
-              children: suggestions
-                  .map(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  response!.summary,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 12),
+                Text('Action Plan', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                if (response!.suggestions.isEmpty)
+                  Text(
+                    'No suggestions returned by the API.',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: AppTheme.outlineVariant),
+                  )
+                else
+                  ...response!.suggestions.map(
                     (item) => Padding(
                       padding: const EdgeInsets.only(bottom: 10),
-                      child: _SuggestionItem(text: item),
+                      child: _SuggestionEntryCard(item: item),
                     ),
+                  ),
+                const SizedBox(height: 6),
+                Text(
+                  'Alternative Activities',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                if (response!.alternativeActivities.isEmpty)
+                  Text(
+                    'No alternatives available.',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: AppTheme.outlineVariant),
                   )
-                  .toList(),
+                else
+                  ...response!.alternativeActivities
+                      .map((item) => _AlternativeActivityCard(item: item)),
+              ],
             ),
         ],
       ),
@@ -446,32 +521,196 @@ class _SuggestionsSection extends StatelessWidget {
   }
 }
 
-class _SuggestionItem extends StatelessWidget {
-  final String text;
+class _SuggestionEntryCard extends StatelessWidget {
+  final SuggestionEntry item;
 
-  const _SuggestionItem({required this.text});
+  const _SuggestionEntryCard({required this.item});
 
   @override
   Widget build(BuildContext context) {
+    final priorityColor = _priorityColor(item.priority);
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppTheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: priorityColor.withValues(alpha: 0.25)),
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.check_circle_outline, size: 18, color: AppTheme.secondary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  item.title,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: priorityColor.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: Text(
+                  item.priority.toUpperCase(),
+                  style: TextStyle(
+                    color: priorityColor,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(item.reason, style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.play_arrow_rounded, size: 18, color: AppTheme.secondary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  item.action,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
           ),
         ],
       ),
+    );
+  }
+
+  Color _priorityColor(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'high':
+        return AppTheme.error;
+      case 'medium':
+        return const Color(0xFFFFB74D);
+      default:
+        return AppTheme.secondary;
+    }
+  }
+}
+
+class _AlternativeActivityCard extends StatelessWidget {
+  final AlternativeActivity item;
+
+  const _AlternativeActivityCard({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(item.basedOn, style: Theme.of(context).textTheme.titleSmall),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.secondary.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: Text(
+                  item.type,
+                  style: TextStyle(
+                    color: AppTheme.secondary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(item.suggestion, style: Theme.of(context).textTheme.bodyMedium),
+        ],
+      ),
+    );
+  }
+}
+
+class SuggestionsResponse {
+  final String summary;
+  final List<SuggestionEntry> suggestions;
+  final List<AlternativeActivity> alternativeActivities;
+
+  const SuggestionsResponse({
+    required this.summary,
+    required this.suggestions,
+    required this.alternativeActivities,
+  });
+
+  factory SuggestionsResponse.fromJson(Map<String, dynamic> json) {
+    return SuggestionsResponse(
+      summary: json['summary']?.toString() ?? 'Suggestions generated.',
+      suggestions: (json['suggestions'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(SuggestionEntry.fromJson)
+          .toList(),
+      alternativeActivities: (json['alternative_activities'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(AlternativeActivity.fromJson)
+          .toList(),
+    );
+  }
+}
+
+class SuggestionEntry {
+  final String title;
+  final String reason;
+  final String action;
+  final String priority;
+
+  const SuggestionEntry({
+    required this.title,
+    required this.reason,
+    required this.action,
+    required this.priority,
+  });
+
+  factory SuggestionEntry.fromJson(Map<String, dynamic> json) {
+    return SuggestionEntry(
+      title: json['title']?.toString() ?? 'Suggestion',
+      reason: json['reason']?.toString() ?? 'No reason provided.',
+      action: json['action']?.toString() ?? 'No action provided.',
+      priority: json['priority']?.toString() ?? 'low',
+    );
+  }
+}
+
+class AlternativeActivity {
+  final String basedOn;
+  final String suggestion;
+  final String type;
+
+  const AlternativeActivity({
+    required this.basedOn,
+    required this.suggestion,
+    required this.type,
+  });
+
+  factory AlternativeActivity.fromJson(Map<String, dynamic> json) {
+    return AlternativeActivity(
+      basedOn: json['based_on']?.toString() ?? 'Current behavior',
+      suggestion: json['suggestion']?.toString() ?? 'Take a short break away from your phone.',
+      type: json['type']?.toString() ?? 'mental',
     );
   }
 }

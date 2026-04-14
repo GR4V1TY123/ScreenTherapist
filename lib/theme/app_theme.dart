@@ -14,7 +14,7 @@ class AppTheme {
   static final Color surfaceContainerLow = const Color(0xFF091328);
   static final Color surfaceContainerHigh = const Color(0xFF141f38);
   static final Color surfaceContainerHighest = const Color(0xFF192540);
-  static final Color outlineVariant = const Color(0xFF40485d);
+  static final Color outlineVariant = const Color(0xFF7382A8);
   static final Color surfaceBright = const Color(0xFF1f2b49); // used with 40% opacity for glass
 
   static ThemeData get darkTheme {

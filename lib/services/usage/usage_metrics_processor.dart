@@ -19,6 +19,17 @@ class UsageMetricsProcessor {
   static const String entertainmentCategory = 'entertainment';
   static const String generalCategory = 'general';
 
+  // General apps are mixed-intent, so they contribute partially to productive behavior.
+  static const double _generalProductiveWeight = 0.45;
+
+  static const double _focusBaseline = 100.0;
+  static const double _minimumFocusScore = 35.0;
+
+  static const double _screenPenaltyWeight = 16.0;
+  static const double _unlockPenaltyWeight = 24.0;
+  static const double _lateNightPenaltyWeight = 30.0;
+  static const double _productiveBonusWeight = 18.0;
+
   static const Set<String> _productiveApps = {
     'com.android.chrome',
     'com.google.android.gm',
@@ -46,16 +57,34 @@ class UsageMetricsProcessor {
   static UsageDerivedMetrics derive(DailyUsageStats daily) {
     final totalAppUsage = _sumMap(daily.appUsage);
     final productiveUsage = _sumCategory(daily.appUsage, _productiveApps);
-    final productiveRatio = totalAppUsage > 0 ? productiveUsage / totalAppUsage : 0.0;
+    final entertainmentUsage = _sumCategory(daily.appUsage, _entertainmentApps);
+    final generalUsage = (totalAppUsage - productiveUsage - entertainmentUsage).clamp(0, totalAppUsage);
+
+    final weightedProductiveUsage = productiveUsage + (generalUsage * _generalProductiveWeight);
+    final productiveRatio = totalAppUsage > 0 ? (weightedProductiveUsage / totalAppUsage).clamp(0.0, 1.0) : 0.0;
 
     final screenHours = daily.screenTimeMs / const Duration(hours: 1).inMilliseconds;
     final lateNightHours = daily.lateNightUsageMs / const Duration(hours: 1).inMilliseconds;
 
-    final unlockPenalty = (daily.unlockCount / 120.0).clamp(0.0, 1.0) * 22.0;
-    final latePenalty = (lateNightHours / 2.5).clamp(0.0, 1.0) * 28.0;
-    final screenPenalty = (screenHours / 10.0).clamp(0.0, 1.0) * 16.0;
-    final productiveBoost = productiveRatio * 34.0;
-    final focus = (58.0 + productiveBoost - unlockPenalty - latePenalty - screenPenalty).clamp(0.0, 100.0);
+    // Allow more intentional usage before mild penalties kick in.
+    final screenThresholdHours = 4.0 + (1.5 * productiveRatio);
+    final screenOveruse = (screenHours - screenThresholdHours).clamp(0.0, double.infinity);
+
+    // Frequent unlocks are a stronger distraction signal than total screen time.
+    final expectedUnlocks = (12.0 + (screenHours * (12.0 - (2.0 * productiveRatio)))).clamp(20.0, 90.0);
+    final unlockOveruse = (daily.unlockCount - expectedUnlocks).clamp(0.0, double.infinity);
+
+    // Even modest late-night usage should matter more for focus quality.
+    final lateNightThresholdHours = 0.25;
+    final lateNightOveruse = (lateNightHours - lateNightThresholdHours).clamp(0.0, double.infinity);
+
+    final screenPenalty = _softPenalty(screenOveruse, pivot: 2.0, maxPenalty: _screenPenaltyWeight);
+    final unlockPenalty = _softPenalty(unlockOveruse, pivot: 35.0, maxPenalty: _unlockPenaltyWeight);
+    final latePenalty = _softPenalty(lateNightOveruse, pivot: 1.2, maxPenalty: _lateNightPenaltyWeight);
+    final productiveBoost = productiveRatio * _productiveBonusWeight;
+
+    final focus = (_focusBaseline + productiveBoost - screenPenalty - unlockPenalty - latePenalty)
+        .clamp(_minimumFocusScore, 100.0);
 
     final dominant = _dominantUsage(daily.appUsage);
     final dominantRatio = totalAppUsage > 0 ? dominant.value / totalAppUsage : 0.0;
@@ -106,5 +135,15 @@ class UsageMetricsProcessor {
       }
     }
     return top;
+  }
+
+  static double _softPenalty(
+    double overage, {
+    required double pivot,
+    required double maxPenalty,
+  }) {
+    if (overage <= 0) return 0.0;
+    final scaled = overage / (overage + pivot);
+    return scaled * maxPenalty;
   }
 }
