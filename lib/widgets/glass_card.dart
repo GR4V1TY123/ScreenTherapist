@@ -24,14 +24,16 @@ class GlassCard extends StatelessWidget {
     Widget card = Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: gradient == null ? AppTheme.surfaceBright.withValues(alpha: 0.4) : null,
+        color: gradient == null
+            ? AppTheme.surfaceBright.withValues(alpha: 0.4)
+            : null,
         gradient: gradient,
         borderRadius: BorderRadius.circular(borderRadius),
         border: Border(
-           top: BorderSide(
-             color: AppTheme.outlineVariant.withValues(alpha: 0.2),
-             width: 0.5
-           )
+          top: BorderSide(
+            color: AppTheme.outlineVariant.withValues(alpha: 0.2),
+            width: 0.5,
+          ),
         ),
       ),
       child: child,

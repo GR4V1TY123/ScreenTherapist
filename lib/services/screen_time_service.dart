@@ -89,24 +89,43 @@ class ScreenTimeService {
     }
 
     final ignoredTokens = <String>{
-      'com', 'org', 'net', 'in', 'co', 'io', 'android', 'apps', 'app', 'mobile', 'lite'
+      'com',
+      'org',
+      'net',
+      'in',
+      'co',
+      'io',
+      'android',
+      'apps',
+      'app',
+      'mobile',
+      'lite',
     };
 
     final rawParts = packageName.split('.').where((p) => p.isNotEmpty).toList();
-    final candidateParts = rawParts.where((p) => !ignoredTokens.contains(p.toLowerCase())).toList();
-    final picked = (candidateParts.isNotEmpty ? candidateParts.last : rawParts.isNotEmpty ? rawParts.last : packageName)
-        .replaceAll(RegExp(r'[_-]+'), ' ')
-        .replaceAll(RegExp(r'\d+'), ' ')
-        .trim();
+    final candidateParts = rawParts
+        .where((p) => !ignoredTokens.contains(p.toLowerCase()))
+        .toList();
+    final picked =
+        (candidateParts.isNotEmpty
+                ? candidateParts.last
+                : rawParts.isNotEmpty
+                ? rawParts.last
+                : packageName)
+            .replaceAll(RegExp(r'[_-]+'), ' ')
+            .replaceAll(RegExp(r'\d+'), ' ')
+            .trim();
 
     if (picked.isEmpty) return packageName;
 
     return picked
         .split(' ')
         .where((s) => s.isNotEmpty)
-        .map((word) => word.length == 1
-            ? word.toUpperCase()
-            : '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}')
+        .map(
+          (word) => word.length == 1
+              ? word.toUpperCase()
+              : '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}',
+        )
         .join(' ');
   }
 
@@ -130,22 +149,34 @@ class ScreenTimeService {
 
     final today = DateTime.now();
 
-    final todayRaw = await DailyUsageService.fetchAndStoreDailyStats(day: today) ??
+    final todayRaw =
+        await DailyUsageService.fetchAndStoreDailyStats(day: today) ??
         await DailyUsageService.getStoredDailyStats(day: today);
     if (todayRaw == null) return null;
 
     final weekData = <DailyUsageStats>[];
     for (int i = 6; i >= 0; i--) {
-      final day = DateTime(today.year, today.month, today.day).subtract(Duration(days: i));
-      final raw = await DailyUsageService.getStoredDailyStats(day: day) ??
+      final day = DateTime(
+        today.year,
+        today.month,
+        today.day,
+      ).subtract(Duration(days: i));
+      final raw =
+          await DailyUsageService.getStoredDailyStats(day: day) ??
           await DailyUsageService.fetchAndStoreDailyStats(day: day);
       if (raw != null) {
         weekData.add(raw);
       }
     }
 
-    final weeklyScreenTimeMs = weekData.fold<int>(0, (sum, d) => sum + d.screenTimeMs);
-    final weeklyUnlocks = weekData.fold<int>(0, (sum, d) => sum + d.unlockCount);
+    final weeklyScreenTimeMs = weekData.fold<int>(
+      0,
+      (sum, d) => sum + d.screenTimeMs,
+    );
+    final weeklyUnlocks = weekData.fold<int>(
+      0,
+      (sum, d) => sum + d.unlockCount,
+    );
 
     final weeklyAppUsage = <String, int>{};
     for (final day in weekData) {
@@ -187,21 +218,26 @@ class ScreenTimeService {
     final maxValue = values.reduce((a, b) => a > b ? a : b);
     if (maxValue <= 0) return List<double>.filled(7, 0.0);
 
-    final normalized = values.map((v) => (v / maxValue).clamp(0.0, 1.0)).toList();
+    final normalized = values
+        .map((v) => (v / maxValue).clamp(0.0, 1.0))
+        .toList();
     if (normalized.length == 7) return normalized;
 
-    final padded = List<double>.filled(7 - normalized.length, 0.0)..addAll(normalized);
+    final padded = List<double>.filled(7 - normalized.length, 0.0)
+      ..addAll(normalized);
     return padded;
   }
 
   static List<AppUsageInfo> _toAppUsageInfoList(Map<String, int> usageMap) {
     final list = usageMap.entries
-        .map((entry) => AppUsageInfo(
-              entry.key,
-              Duration(milliseconds: entry.value),
-              displayName: humanReadableAppName(entry.key),
-              category: UsageMetricsProcessor.categorizeApp(entry.key),
-            ))
+        .map(
+          (entry) => AppUsageInfo(
+            entry.key,
+            Duration(milliseconds: entry.value),
+            displayName: humanReadableAppName(entry.key),
+            category: UsageMetricsProcessor.categorizeApp(entry.key),
+          ),
+        )
         .toList();
     list.sort((a, b) => b.usage.compareTo(a.usage));
     return list;
@@ -219,9 +255,10 @@ class ScreenTimeService {
       totals[category] = (totals[category] ?? 0) + ms;
     });
 
-    return totals.map((key, value) => MapEntry(key, Duration(milliseconds: value)));
+    return totals.map(
+      (key, value) => MapEntry(key, Duration(milliseconds: value)),
+    );
   }
-
 }
 
 class AppUsageInfo {
@@ -235,7 +272,8 @@ class AppUsageInfo {
     this.usage, {
     String? displayName,
     this.category = 'general',
-  }) : displayName = displayName ?? ScreenTimeService.humanReadableAppName(packageName);
+  }) : displayName =
+           displayName ?? ScreenTimeService.humanReadableAppName(packageName);
 
   String get name => displayName;
 }

@@ -31,7 +31,12 @@ class HomeTab extends StatelessWidget {
               final quickAction = _buildQuickAction(data);
 
               return ListView(
-                padding: const EdgeInsets.only(top: 100, bottom: 120, left: 20, right: 20),
+                padding: const EdgeInsets.only(
+                  top: 100,
+                  bottom: 120,
+                  left: 20,
+                  right: 20,
+                ),
                 children: [
                   _FocusScoreCard(score: data.focusScore.round()),
                   const SizedBox(height: 16),
@@ -82,7 +87,12 @@ class HomeTab extends StatelessWidget {
   static String _buildQuickAction(ScreenTimeData data) {
     final topEntertainment = data.todayApps.firstWhere(
       (a) => a.category == 'entertainment',
-      orElse: () => AppUsageInfo('unknown', Duration.zero, displayName: 'entertainment apps', category: 'entertainment'),
+      orElse: () => AppUsageInfo(
+        'unknown',
+        Duration.zero,
+        displayName: 'entertainment apps',
+        category: 'entertainment',
+      ),
     );
 
     if (data.lateNightUsage.inMinutes > 30) {
@@ -113,7 +123,10 @@ class _UnavailableState extends StatelessWidget {
             children: [
               const Icon(Icons.lock_outline, size: 42),
               const SizedBox(height: 10),
-              Text('No real usage data available', style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                'No real usage data available',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const SizedBox(height: 8),
               const Text(
                 'Grant usage access to view today\'s live metrics.',
@@ -123,7 +136,7 @@ class _UnavailableState extends StatelessWidget {
               ElevatedButton(
                 onPressed: ScreenTimeService.promptPermission,
                 child: const Text('Open Usage Access Settings'),
-              )
+              ),
             ],
           ),
         ),
@@ -145,14 +158,20 @@ class _FocusScoreCard extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       child: Column(
         children: [
-          Text('How Are You Doing Today?', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            'How Are You Doing Today?',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 14),
           Container(
             width: 140,
             height: 140,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: color.withValues(alpha: 0.95), width: 10),
+              border: Border.all(
+                color: color.withValues(alpha: 0.95),
+                width: 10,
+              ),
             ),
             child: Center(
               child: Column(
@@ -161,11 +180,16 @@ class _FocusScoreCard extends StatelessWidget {
                   Text(
                     '$score',
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          color: color,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      color: color,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                  Text('FOCUS', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppTheme.outlineVariant)),
+                  Text(
+                    'FOCUS',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: AppTheme.outlineVariant,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -197,20 +221,35 @@ class _TodayStatsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final lateNightHigh = lateNightUsage.inMinutes > 30;
 
-    return Row(
-      children: [
-        Expanded(child: _StatCard(label: 'Screen Time', value: _formatDuration(screenTimeToday), valueColor: AppTheme.primary)),
-        const SizedBox(width: 10),
-        Expanded(child: _StatCard(label: 'Unlocks', value: '$unlockCountToday', valueColor: AppTheme.secondary)),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _StatCard(
-            label: 'Late Night',
-            value: _formatDuration(lateNightUsage),
-            valueColor: lateNightHigh ? AppTheme.error : AppTheme.primary,
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _StatCard(
+              label: 'Screen Time',
+              value: _formatDuration(screenTimeToday),
+              valueColor: AppTheme.primary,
+            ),
           ),
-        ),
-      ],
+          const SizedBox(width: 10),
+          Expanded(
+            child: _StatCard(
+              label: 'Unlocks',
+              value: '$unlockCountToday',
+              valueColor: AppTheme.secondary,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _StatCard(
+              label: 'Late Night',
+              value: _formatDuration(lateNightUsage),
+              valueColor: lateNightHigh ? AppTheme.error : AppTheme.primary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -239,11 +278,20 @@ class _StatCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppTheme.outlineVariant)),
+          Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: AppTheme.outlineVariant),
+          ),
           const SizedBox(height: 8),
           Text(
             value,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(color: valueColor, fontSize: 16, fontWeight: FontWeight.w700),
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: valueColor,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
             overflow: TextOverflow.ellipsis,
           ),
         ],
@@ -267,7 +315,12 @@ class _TopAppsCard extends StatelessWidget {
           Text('Top Apps Today', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
           if (topApps.isEmpty)
-            Text('No app activity available.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.outlineVariant))
+            Text(
+              'No app activity available.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppTheme.outlineVariant),
+            )
           else
             ...topApps.map(
               (app) => Padding(
@@ -296,12 +349,19 @@ class _TopAppRow extends StatelessWidget {
         Expanded(
           child: Text(
             app.name,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
             overflow: TextOverflow.ellipsis,
           ),
         ),
         const SizedBox(width: 10),
-        Text(_formatDuration(app.usage), style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.onSurface)),
+        Text(
+          _formatDuration(app.usage),
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: AppTheme.onSurface),
+        ),
         const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -311,7 +371,11 @@ class _TopAppRow extends StatelessWidget {
           ),
           child: Text(
             category,
-            style: TextStyle(color: categoryColor, fontSize: 11, fontWeight: FontWeight.w700),
+            style: TextStyle(
+              color: categoryColor,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ],
@@ -343,7 +407,12 @@ class _MessageCard extends StatelessWidget {
   final IconData icon;
   final Color color;
 
-  const _MessageCard({required this.title, required this.text, required this.icon, required this.color});
+  const _MessageCard({
+    required this.title,
+    required this.text,
+    required this.icon,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -355,7 +424,10 @@ class _MessageCard extends StatelessWidget {
           Container(
             width: 32,
             height: 32,
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Icon(icon, color: color, size: 18),
           ),
           const SizedBox(width: 10),
@@ -363,7 +435,12 @@ class _MessageCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppTheme.outlineVariant)),
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: AppTheme.outlineVariant,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Text(text, style: Theme.of(context).textTheme.bodyLarge),
               ],
