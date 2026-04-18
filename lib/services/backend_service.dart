@@ -5,7 +5,7 @@ import 'daily_usage_service.dart';
 import 'usage/usage_metrics_processor.dart';
 
 class BackendService {
-  static const String baseUrl = 'http://10.86.166.33:8000/api/v1';
+  static const String baseUrl = 'https://screentherapist-gb35.onrender.com/api/v1';
 
   static Future<AnalysisResponse?> fetchAnalysis() async {
     try {

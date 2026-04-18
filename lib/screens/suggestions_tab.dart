@@ -361,7 +361,12 @@ class SuggestionsInputData {
 
     return {
       'query': query.isEmpty
-          ? 'Please give me customized suggestions based ONLY on my behavioral metrics and trends above. Look at both my daily stats and 14-day progression.'
+          ? 'Act as an expert digital wellbeing coach. Carefully analyze my behavioral metrics, 14-day regression trends, and my specific top used apps provided below.\n\n'
+            'Please provide:\n'
+            '1. A personalized assessment of my current trends (highlighting any metrics that are worsening or improving like focus score or screen time).\n'
+            '2. Detailed, practical, and scientifically proven strategies targeted explicitly at my most heavily used apps (e.g., if social media is top, give tactile strategies for that app category).\n'
+            '3. Concrete steps to optimize my schedule based on my peak usage and worst active days to prevent burnout and curb phone checking.\n\n'
+            'Do not give generic advice. Every recommendation must directly reference the exact data points provided.'
           : query,
       'metrics': combinedMetrics,
       'apps': apps,
