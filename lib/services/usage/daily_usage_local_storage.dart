@@ -52,7 +52,10 @@ class DailyUsageLocalStorage {
     return DailyUsageStats.fromDbMap(rows.first);
   }
 
-  Future<List<DailyUsageStats>> getLastNDays(DateTime dayInclusive, int days) async {
+  Future<List<DailyUsageStats>> getLastNDays(
+    DateTime dayInclusive,
+    int days,
+  ) async {
     final db = await _database;
     final start = dayInclusive.subtract(Duration(days: days - 1));
     final rows = await db.query(

@@ -16,7 +16,9 @@ class DailyUsageService {
     await _fetcher.openUsageSettings();
   }
 
-  static Future<DailyUsageStats?> fetchAndStoreDailyStats({DateTime? day}) async {
+  static Future<DailyUsageStats?> fetchAndStoreDailyStats({
+    DateTime? day,
+  }) async {
     final now = DateTime.now();
     final selectedDay = DateTime(
       day?.year ?? now.year,
@@ -53,7 +55,10 @@ class DailyUsageService {
 
     if (response == null) return null;
 
-    final stats = DailyUsageStats.fromChannelMap(day: selectedDay, map: response);
+    final stats = DailyUsageStats.fromChannelMap(
+      day: selectedDay,
+      map: response,
+    );
     await _storage.upsert(stats);
     return stats;
   }
@@ -96,9 +101,11 @@ class DailyUsageService {
     return last
         .split(' ')
         .where((s) => s.isNotEmpty)
-        .map((word) => word.length == 1
-            ? word.toUpperCase()
-            : '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}')
+        .map(
+          (word) => word.length == 1
+              ? word.toUpperCase()
+              : '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}',
+        )
         .join(' ');
   }
 }

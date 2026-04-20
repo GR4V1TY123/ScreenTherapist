@@ -8,7 +8,9 @@ class TopNavRoute extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      color: AppTheme.surface.withValues(alpha: 0.8), // simulating backdrop blur
+      color: AppTheme.surface.withValues(
+        alpha: 0.8,
+      ), // simulating backdrop blur
       child: SafeArea(
         bottom: false,
         child: Row(
@@ -24,7 +26,9 @@ class TopNavRoute extends StatelessWidget {
                   ).createShader(bounds),
                   child: Text(
                     'Screen Therapist',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.white),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.headlineSmall?.copyWith(color: Colors.white),
                   ),
                 ),
               ],
@@ -35,7 +39,9 @@ class TopNavRoute extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: AppTheme.surfaceContainerHigh,
-                border: Border.all(color: AppTheme.outlineVariant.withValues(alpha: 0.2)),
+                border: Border.all(
+                  color: AppTheme.outlineVariant.withValues(alpha: 0.2),
+                ),
               ),
               child: Icon(Icons.person, color: AppTheme.primary, size: 20),
             ),
