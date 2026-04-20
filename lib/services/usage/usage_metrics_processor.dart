@@ -20,7 +20,7 @@ class UsageMetricsProcessor {
   static const String generalCategory = 'general';
 
   // General apps are mixed-intent, so they contribute partially to productive behavior.
-  static const double _generalProductiveWeight = 0.45;
+  static const double _generalProductiveWeight = 0.25; //bonus
 
   static const double _focusBaseline = 100.0;
   static const double _minimumFocusScore = 35.0;
@@ -28,7 +28,8 @@ class UsageMetricsProcessor {
   static const double _screenPenaltyWeight = 16.0;
   static const double _unlockPenaltyWeight = 24.0;
   static const double _lateNightPenaltyWeight = 30.0;
-  static const double _productiveBonusWeight = 18.0;
+  
+  static const double _productiveBonusWeight = 18.0; //bonus
 
   static const Set<String> _productiveApps = {
     'com.android.chrome',

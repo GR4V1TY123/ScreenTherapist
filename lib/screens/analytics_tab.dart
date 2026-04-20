@@ -51,9 +51,6 @@ class AnalyticsTab extends StatelessWidget {
                   const SizedBox(height: 10),
                   _UsageBreakdownCard(breakdown: categoryBreakdown),
                   const SizedBox(height: 16),
-                  const _SectionTitle(title: 'Unlock Pattern'),
-                  const SizedBox(height: 10),
-                  _UnlockPatternUnavailable(totalUnlocks: data.todayUnlocks),
                   const SizedBox(height: 16),
                   const _SectionTitle(title: 'Top Apps (Weekly)'),
                   const SizedBox(height: 10),
@@ -235,12 +232,7 @@ class _FocusIndicatorCard extends StatelessWidget {
             color: AppTheme.secondary,
             backgroundColor: AppTheme.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(99),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '7-day focus history is unavailable with current collected fields.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.outlineVariant, fontSize: 12),
-          ),
+          )
         ],
       ),
     );
@@ -303,30 +295,6 @@ class _RatioRow extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _UnlockPatternUnavailable extends StatelessWidget {
-  final int totalUnlocks;
-
-  const _UnlockPatternUnavailable({required this.totalUnlocks});
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassCard(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Total unlocks today: $totalUnlocks', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          Text(
-            'Time-of-day unlock distribution (morning/afternoon/evening/night) is unavailable with current collected fields.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.outlineVariant),
-          ),
-        ],
-      ),
     );
   }
 }

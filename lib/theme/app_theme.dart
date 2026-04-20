@@ -6,7 +6,7 @@ class AppTheme {
   static final Color onSurface = const Color(0xFFdee5ff);
   static final Color primary = const Color(0xFF9fa7ff);
   static final Color primaryContainer = const Color(0xFF8d98ff);
-  static final Color secondary = const Color(0xFF62fae3);
+  static final Color secondary = const Color.fromARGB(255, 249, 255, 131);
   static final Color secondaryContainer = const Color(0xFF006b5f);
   static final Color tertiary = const Color(0xFFc180ff);
   static final Color error = const Color(0xFFff6e84);
